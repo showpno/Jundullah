@@ -21,6 +21,7 @@ import 'screen/product_favorite_screen/provider/favorite_provider.dart';
 import 'screen/profile_screen/provider/profile_provider.dart';
 import 'utility/app_theme.dart';
 import 'utility/extensions.dart';
+import 'utility/snack_bar_helper.dart';  // <-- Ensure navigatorKey is imported from here
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,7 +63,10 @@ Future<void> main() async {
           create: (context) => ProductDetailProvider(context.dataProvider),
         ),
         ChangeNotifierProvider(
-          create: (context) => CartProvider(context.userProvider),
+          create: (context) => CartProvider(
+            context.userProvider,
+            context.dataProvider,
+          ),
         ),
         ChangeNotifierProvider(
           create: (context) => FavoriteProvider(context.dataProvider),
@@ -81,6 +85,7 @@ class MyApp extends StatelessWidget {
     User? loginUser = context.userProvider.getLoginUsr();
 
     return GetMaterialApp(
+      navigatorKey: navigatorKey,   // ✅ FIXED — REQUIRED FOR SNACKBAR
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         dragDevices: {
           PointerDeviceKind.mouse,

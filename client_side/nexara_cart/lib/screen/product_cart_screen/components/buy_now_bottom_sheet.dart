@@ -21,15 +21,12 @@ void showCustomBottomSheet(BuildContext context) {
     await context.cartProvider.submitOrder().then((result) {
       Navigator.pop(context);
 
-      if (result == null) {
         Navigator.pop(context);
         context.cartProvider.clearCouponDiscount();
         context.cartProvider.clearCartItems();
         SnackBarHelper.showSuccessSnackBar(
             'Your order has been placed successfully.');
-      } else {
-        SnackBarHelper.showErrorSnackBar(result);
-      }
+
     });
   }
 

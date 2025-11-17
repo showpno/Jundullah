@@ -2,6 +2,7 @@ const express = require("express");
 const asyncHandler = require("express-async-handler");
 const router = express.Router();
 const Order = require("../model/order");
+const Product = require("../model/product");
 
 // Get all orders
 router.get(
@@ -84,6 +85,7 @@ router.post(
       orderTotal,
       trackingUrl,
     } = req.body;
+    
     if (
       !userID ||
       !items ||
@@ -92,16 +94,34 @@ router.post(
       !paymentMethod ||
       !orderTotal
     ) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message:
-            "User ID, items, totalPrice, shippingAddress, paymentMethod, and orderTotal are required.",
-        });
+      return res.status(400).json({
+        success: false,
+        message:
+          "User ID, items, totalPrice, shippingAddress, paymentMethod, and orderTotal are required.",
+      });
     }
 
     try {
+      // Validate stock availability for all items
+      for (const item of items) {
+        const product = await Product.findById(item.productID);
+        
+        if (!product) {
+          return res.status(404).json({
+            success: false,
+            message: `Product ${item.productName} not found.`,
+          });
+        }
+
+        if (product.quantity < item.quantity) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient stock for ${item.productName}. Available: ${product.quantity}, Requested: ${item.quantity}`,
+          });
+        }
+      }
+
+      // Create the order
       const order = new Order({
         userID,
         orderStatus,
@@ -113,11 +133,22 @@ router.post(
         orderTotal,
         trackingUrl,
       });
+      
       const newOrder = await order.save();
+
+      // Update product quantities after successful order
+      for (const item of items) {
+        await Product.findByIdAndUpdate(
+          item.productID,
+          { $inc: { quantity: -item.quantity } },
+          { new: true }
+        );
+      }
+
       res.json({
         success: true,
         message: "Order created successfully.",
-        data: null,
+        data: newOrder,
       });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
@@ -132,6 +163,7 @@ router.put(
     try {
       const orderID = req.params.id;
       const { orderStatus, trackingUrl } = req.body;
+      
       if (!orderStatus) {
         return res
           .status(400)
@@ -153,7 +185,7 @@ router.put(
       res.json({
         success: true,
         message: "Order updated successfully.",
-        data: null,
+        data: updatedOrder,
       });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
@@ -168,11 +200,13 @@ router.delete(
     try {
       const orderID = req.params.id;
       const deletedOrder = await Order.findByIdAndDelete(orderID);
+      
       if (!deletedOrder) {
         return res
           .status(404)
           .json({ success: false, message: "Order not found." });
       }
+      
       res.json({ success: true, message: "Order deleted successfully." });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });

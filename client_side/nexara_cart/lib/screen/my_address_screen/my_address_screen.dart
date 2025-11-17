@@ -22,10 +22,15 @@ class MyAddressPage extends StatelessWidget {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
             child: AppBar(
-              leading: const Icon(
-                Icons.arrow_back,
-                color: Colors.black,
-              ),
+             leading: IconButton(
+  icon: const Icon(
+    Icons.arrow_back,
+    color: Colors.black,
+  ),
+  onPressed: () {
+    Navigator.of(context).pop();
+  },
+),
               elevation: 0.0,
               title: const Text(
                 "Shipping Address",

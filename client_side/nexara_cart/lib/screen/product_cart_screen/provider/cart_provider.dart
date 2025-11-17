@@ -9,7 +9,9 @@ import 'package:nexara_cart/models/api_response.dart';
 import 'package:nexara_cart/utility/utility_extention.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 
+import '../../../core/data/data_provider.dart';
 import '../../../models/coupon.dart';
+import '../../../models/product.dart';
 import '../../../services/http_services.dart';
 import '../../../utility/constants.dart';
 import '../../../utility/snack_bar_helper.dart';
@@ -20,6 +22,7 @@ class CartProvider extends ChangeNotifier {
   final box = GetStorage();
   Razorpay razorpay = Razorpay();
   final UserProvider _userProvider;
+  final DataProvider _dataProvider;
   var flutterCart = FlutterCart();
   List<CartModel> myCartItems = [];
 
@@ -37,12 +40,37 @@ class CartProvider extends ChangeNotifier {
   double couponCodeDiscount = 0;
   String selectedPaymentOption = PAYMENT_METHOD_COD;
 
-  CartProvider(this._userProvider);
+  CartProvider(this._userProvider, this._dataProvider);
 
   void updateCart(CartModel cartItem, int quantity) {
-    quantity = cartItem.quantity + quantity;
-    flutterCart.updateQuantity(cartItem.productId, cartItem.variants, quantity);
+    int newQuantity = cartItem.quantity + quantity;
+    
+    // Don't allow negative or zero quantities
+    if (newQuantity <= 0) {
+flutterCart.removeItem(cartItem.productId, cartItem.variants);
+      notifyListeners();
+      return;
+    }
 
+    // Check stock availability
+    Product? product = _dataProvider.allProducts.firstWhere(
+      (p) => p.sId == cartItem.productId,
+      orElse: () => Product(),
+    );
+
+    if (product.sId == null) {
+      SnackBarHelper.showErrorSnackBar('Product not found.');
+      return;
+    }
+
+    if (newQuantity > (product.quantity ?? 0)) {
+      SnackBarHelper.showErrorSnackBar(
+        'Cannot add more. Only ${product.quantity} items available in stock.'
+      );
+      return;
+    }
+
+    flutterCart.updateQuantity(cartItem.productId, cartItem.variants, newQuantity);
     notifyListeners();
   }
 
@@ -56,13 +84,11 @@ class CartProvider extends ChangeNotifier {
 
   getCartItems() {
     myCartItems = flutterCart.cartItemsList;
-
     notifyListeners();
   }
 
   clearCartItems() {
     flutterCart.clearCart();
-
     notifyListeners();
   }
 
@@ -131,12 +157,43 @@ class CartProvider extends ChangeNotifier {
   }
 
   Future<String?> submitOrder() async {
+    // Validate stock before submitting order
+    String? stockValidation = await validateStockBeforeOrder();
+    if (stockValidation != null) {
+      return stockValidation;
+    }
+
     if (selectedPaymentOption == PAYMENT_METHOD_COD) {
       return await addOrder();
     } else {
       return await stripePayment(operation: () async {
         return await addOrder();
       });
+    }
+  }
+
+  Future<String?> validateStockBeforeOrder() async {
+    try {
+      // Refresh product data to get latest stock
+      await _dataProvider.getAllProducts();
+
+      for (CartModel cartItem in myCartItems) {
+        Product? product = _dataProvider.allProducts.firstWhere(
+          (p) => p.sId == cartItem.productId,
+          orElse: () => Product(),
+        );
+
+        if (product.sId == null) {
+          return 'Product ${cartItem.productName} not found.';
+        }
+
+        if ((product.quantity ?? 0) < cartItem.quantity) {
+          return 'Insufficient stock for ${cartItem.productName}. Available: ${product.quantity}, Requested: ${cartItem.quantity}';
+        }
+      }
+      return null;
+    } catch (e) {
+      return 'Error validating stock: $e';
     }
   }
 
@@ -172,6 +229,8 @@ class CartProvider extends ChangeNotifier {
 
         if (apiResponse.success == true) {
           log('order added');
+          // Refresh product list to show updated quantities
+          await _dataProvider.getAllProducts();
           return null;
         } else {
           return 'Failed to order: ${apiResponse.message}';
@@ -252,10 +311,7 @@ class CartProvider extends ChangeNotifier {
             line1: streetController.text,
             line2: stateController.text,
             postalCode: postalCodeController.text,
-            state: stateController.text
-            // Other address details
-            ),
-        // Other billing details
+            state: stateController.text),
       );
 
       await Stripe.instance.initPaymentSheet(
@@ -267,18 +323,11 @@ class CartProvider extends ChangeNotifier {
           customerId: customer,
           style: ThemeMode.light,
           billingDetails: billingDetails,
-          // googlePay: const PaymentSheetGooglePay(
-          //   merchantCountryCode: 'US',
-          //   currencyCode: 'usd',
-          //   testEnv: true,
-          // ),
-          // applePay: const PaymentSheetApplePay(merchantCountryCode: 'US')
         ),
       );
 
       await Stripe.instance.presentPaymentSheet().then((value) {
         log('payment success');
-        //? do the success operation
         return operation();
       }).onError((error, stackTrace) {
         if (error is StripeException) {
@@ -325,7 +374,6 @@ class CartProvider extends ChangeNotifier {
         razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS,
             (PaymentSuccessResponse response) {
           log('payment success');
-          //? do the success operation
           return operation();
         });
         razorpay.on(Razorpay.EVENT_PAYMENT_ERROR,

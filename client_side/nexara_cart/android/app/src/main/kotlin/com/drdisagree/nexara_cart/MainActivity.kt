@@ -1,4 +1,4 @@
-package com.drdisagree.nexara_cart
+package com.Jundullah.nexara_cart
 
 import io.flutter.embedding.android.FlutterActivity
 

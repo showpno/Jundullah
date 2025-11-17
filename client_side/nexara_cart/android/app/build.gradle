@@ -24,7 +24,7 @@ if (flutterVersionName == null) {
 }
 
 android {
-    namespace = "com.drdisagree.nexara_cart"
+    namespace = "com.Jundullah.nexara_cart"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -34,12 +34,12 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.drdisagree.nexara_cart"
+        applicationId = "com.Jundullah.nexara_cart"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
-        minSdkVersion 23
+        minSdkVersion flutter.minSdkVersion
     }
 
     buildTypes {
